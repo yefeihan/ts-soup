@@ -227,11 +227,14 @@ class Executor:
             empty_check设置为False，需要在数据处理逻辑中对data_source是否为空进行判断，不然当下文在进行数据处理时
             使用行列索引，如果df是空容易导致keyError错误。
             """
-            if data.empty and source.empty_check:
-                self.any_source_empty = True
-                for _ in self.targets:
-                    self.value.append(None)
-                return
+            if hasattr(source,'empty_check'):
+                if source.empty_check and data.empty:
+                    self.any_source_empty = True
+                    for _ in self.targets:
+                        self.value.append(None)
+                    return
+            else:
+                raise ValueError("source.empty_check未设置")
 
             self.source_data.append(data)
 
