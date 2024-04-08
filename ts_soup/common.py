@@ -140,7 +140,10 @@ def __init(customized_table, customized_time, sync_start, sync_end, db_infos):
 
 
 class BaseSource(ABC):
-    def __init__(self, db, index_field, empty_check):
+    def __init__(self,
+                 db:str=None,
+                 index_field: str = 'date',
+                 empty_check: bool = True):
         """
         :param db: 数据库名
         :param index_field: 数据源筛选日期的字段，如果不提供则默认"date",如果需要查询全表，则index_field需要设置为 None。
@@ -159,8 +162,17 @@ class BaseSource(ABC):
 
 
 class BaseTarget(ABC):
-    def __init__(self, tb, index_field, db, user_def_pro, drop_axis, drop_na_subset, drop_na_thresh, has_unique_idx,
-                 is_seperated):
+    def __init__(self,
+                 tb,
+                 index_field: str = 'date',
+                 db: str = None,
+                 user_def_pro: list = None,
+                 drop_axis=0,
+                 drop_na_subset=None,
+                 drop_na_thresh=2,
+                 has_unique_idx=False,
+                 is_seperated=False
+                 ):
         self.tb = tb
         self.user_def_pro = user_def_pro
         if user_def_pro is None:
@@ -207,8 +219,8 @@ class Executor:
         self.source_data = []
         self.executed_table = executed_table
         self.to_update_date = self.__get_update_date()
-        self.index_map = None
         self.customized_updated_state = None
+
 
     def __get_update_date(self):
         return DATA_UPDATED_STATE.loc[~(DATA_UPDATED_STATE[self.executed_table] == 1), 'update_date']
@@ -256,10 +268,13 @@ class Executor:
         for index, target in enumerate(self.targets):
             cur_result = self.value[index]
 
+            if not isinstance(cur_result,pd.DataFrame):
+                raise TypeError('返回数据类型不符')
+
             if len(target.user_def_pro) > 0:  # 获取在funcs里传入的额外属性（target未定义的）
                 for pro in target.user_def_pro:
-                    exec(f"target.{pro} = self.{pro}")
-            # target.index_map = self.index_map
+                    if hasattr(self,pro):
+                        setattr(target, pro, getattr(self, pro))
 
             """
              处理返回值整个为none，如有一个返回结果为none，则整个方法的 这段to_update_date时间都应视为无数据，防止下文
@@ -299,16 +314,14 @@ class Executor:
             # 如果未传入自定义更新日期，则取数据日期作为 处理操作表的更新日期，取各数据结果交集
             if (update_state_date is not None) and (self.customized_updated_state is None):
                 update_state_date = update_state_date.merge(
-                    cur_result[[target.index_field]].drop_duplicates().apply(
-                        lambda x: self.index_map[x] if self.index_map is not None else x),
+                    cur_result[[target.index_field]].drop_duplicates(),
                     left_on='update_date',
                     right_on=target.index_field,
                     how='inner'
                 )[['update_date']]
             elif (update_state_date is None) and (self.customized_updated_state is None):
                 update_state_date = pd.DataFrame(
-                    cur_result[target.index_field].drop_duplicates().apply(
-                        lambda x: self.index_map[x] if self.index_map is not None else x).values,
+                    cur_result[target.index_field].drop_duplicates().values,
                     columns=['update_date']
                 )
 

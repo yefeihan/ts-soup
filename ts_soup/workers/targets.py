@@ -5,8 +5,16 @@ import datetime
 
 
 class TargetTable(BaseTarget):
-    def __init__(self, tb, db: str = None, index_field: str = 'date', is_seperated=False, drop_axis=0,
-                 drop_na_subset=None, drop_na_thresh=2, tag=None, has_unique_idx=False, user_def_pro: list = None):
+    def __init__(self, tb,
+                 db: str = None,
+                 index_field: str = 'date',
+                 is_seperated=False,
+                 drop_axis=0,
+                 drop_na_subset=None,
+                 drop_na_thresh=2,
+                 tag=None,
+                 has_unique_idx=False,
+                 user_def_pro: list = None):
         """
         目标表信息，如果该表需要分表，则tb传入没有分表年份的表名，年份在写入时会自动加入，同时is_seperated设置为True
         :param tb:表名，
@@ -20,7 +28,14 @@ class TargetTable(BaseTarget):
                 否则会出现数据重复
         :param user_def_pro: 用户自定义其他属性,list类型，用以携带其他信息，在类中以self.[property]使用
         """
-        super().__init__(tb, index_field, db, user_def_pro, drop_axis, drop_na_subset, drop_na_thresh, has_unique_idx,
+        super().__init__(tb,
+                         index_field,
+                         db,
+                         user_def_pro,
+                         drop_axis,
+                         drop_na_subset,
+                         drop_na_thresh,
+                         has_unique_idx,
                          is_seperated)
         self.tag = tag
         if is_seperated:
