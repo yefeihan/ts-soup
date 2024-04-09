@@ -11,7 +11,8 @@ class TargetTable(BaseTarget):
                  drop_axis=0,
                  drop_na_subset=None,
                  drop_na_thresh=2,
-                 has_unique_idx=False
+                 has_unique_idx=False,
+                 drop_na_when_insert_date=False
                  ):
         """
         目标表信息，如果该表需要分表，则tb传入没有分表年份的表名，年份在写入时会自动加入，同时is_seperated设置为True
@@ -32,7 +33,7 @@ class TargetTable(BaseTarget):
         self.drop_na_subset = drop_na_subset
         self.drop_na_thresh = drop_na_thresh
         self.has_unique_idx = has_unique_idx
-
+        self.drop_na_when_insert_date = drop_na_when_insert_date
 
     def build_output(self, cur_result):
         # 写库
@@ -55,6 +56,10 @@ class TargetTable(BaseTarget):
                 lambda x: x.strftime('%Y-%m-%d'))
 
         self.__execute_sql(cur_result)
+
+        #如果是两个数据源合并到一个表，两个字段有一个可能为空，则需要在插入前删除为空的字段的日期
+        if self.drop_na_when_insert_date:
+            return cur_result.dropna()[self.index_field].values.tolist()
         return cur_result[self.index_field].values.tolist()
 
 
