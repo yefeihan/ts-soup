@@ -1,6 +1,6 @@
 from ts_soup.app import run_sync
-from ts_soup.common import db_operator,BaseSource,BaseTarget
-from ts_soup.workers import Source,RawSqlSource,MultiSource,TargetTable
+from ts_soup.common import db_operator,BaseSource,BaseTarget,query_in_sql
+from ts_soup.workers import Source,RawSqlSource,MultiSource,TargetTable,InheritIdTable
 
 
 __all__ = [
@@ -11,5 +11,7 @@ __all__ = [
     'RawSqlSource',
     'MultiSource',
     'BaseSource',
-    'BaseTarget'
+    'BaseTarget',
+    'InheritIdTable',
+    'query_in_sql'
 ]
