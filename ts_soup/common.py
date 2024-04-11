@@ -148,9 +148,9 @@ class BaseSource(ABC):
         """
         self.empty_check = empty_check
         if db:
-            self.db = USABLE_DBS[db]
+            self.db = USABLE_DBS.get(db)
         else:
-            self.db = USABLE_DBS['sources_default']
+            self.db = USABLE_DBS.get('sources_default')
         self.index_field = index_field
 
     @abstractmethod
@@ -167,12 +167,12 @@ class BaseTarget(ABC):
             self.user_def_pro = []
 
         if db:
-            self.db = USABLE_DBS[db]
-            self.db_pym = USABLE_DBS[f'{db}_pym']
+            self.db = USABLE_DBS.get(db)
+            self.db_pym = USABLE_DBS.get(f'{db}_pym')
             self.db_str = db
         else:
-            self.db = USABLE_DBS['targets_default']
-            self.db_pym = USABLE_DBS['targets_default_pym']
+            self.db = USABLE_DBS.get('targets_default')
+            self.db_pym = USABLE_DBS.get('targets_default_pym')
             self.db_str = 'targets_default'
 
         self.is_seperated = is_seperated
@@ -271,9 +271,12 @@ class Executor:
                 continue
 
             # 处理返回值部分为空的情况
-            params = {'axis': target.drop_axis, 'how': 'all', 'thresh': target.drop_na_thresh}
+            params = {'axis': target.drop_axis, 'how': 'all'}
             if target.drop_na_subset:
                 params['subset'] = target.drop_na_subset
+            if target.drop_na_thresh:
+                params['thresh'] = target.drop_na_thresh
+                del params['how']
             cur_result = cur_result.dropna(**params)
 
             # 处理经过dropna以后如果全为空的情况，视为全为空，原理同上

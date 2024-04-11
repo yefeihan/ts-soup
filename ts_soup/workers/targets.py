@@ -6,7 +6,7 @@ import datetime
 
 class TargetTable(BaseTarget):
     def __init__(self, tb, db: str = None, index_field: str = 'date', is_seperated=False, drop_axis=0,
-                 drop_na_subset=None, drop_na_thresh=2, tag=None, has_unique_idx=False, user_def_pro: list = None):
+                 drop_na_subset=None, drop_na_thresh=None, tag=None, has_unique_idx=False, user_def_pro: list = None):
         """
         目标表信息，如果该表需要分表，则tb传入没有分表年份的表名，年份在写入时会自动加入，同时is_seperated设置为True
         :param tb:表名，
