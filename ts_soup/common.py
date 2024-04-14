@@ -119,28 +119,18 @@ def __init(customized_table, customized_time, sync_start, sync_end, db_infos):
     both_columns = [i for i in to_update_tables if i in pivot_table.columns.values.tolist()]  # 原来记录里有且现在仍需要的表
 
     non_columns = [i for i in to_update_tables if i not in pivot_table.columns.values.tolist()]  # 原来记录没有现在新增的表
-    state_table = pivot_table[both_columns].fillna(0)
-    state_table[non_columns] = 0
-    state_table = state_table.reset_index()
-    state_table['update_date'] = state_table['update_date'].apply(lambda x: x.strftime('%Y-%m-%d'))
-
-    if len(customized_time) > 0 and len(customized_table) == 0:  # 1、指定时间，未指定表格:
-        DATA_UPDATED_STATE = state_table.loc[state_table['update_date'].isin(customized_time)]
-        DATA_UPDATED_STATE.iloc[:, 1:] = 0
-        return to_update_tables
-
-    elif len(customized_time) == 0 and len(customized_table) > 0:  # 2、指定表格，未指定时间：
-        DATA_UPDATED_STATE = state_table
-        return customized_table
-
-    elif len(customized_time) > 0 and len(customized_table) > 0:  # 3、指定时间，指定表格:
-        DATA_UPDATED_STATE = state_table.loc[state_table['update_date'].isin(customized_time)]
-        DATA_UPDATED_STATE.loc[:, customized_table] = 0
-        return customized_table
-
-    else:
-        DATA_UPDATED_STATE = state_table  # 4、未指定时间，未指定表格:
-        return to_update_tables
+    DATA_UPDATED_STATE = pivot_table[both_columns].fillna(0)
+    DATA_UPDATED_STATE[non_columns] = 0
+    DATA_UPDATED_STATE = DATA_UPDATED_STATE.reset_index()
+    DATA_UPDATED_STATE['update_date'] = DATA_UPDATED_STATE['update_date'].apply(lambda x: x.strftime('%Y-%m-%d'))
+    to_update_tables = customized_table if len(customized_table)>0 else to_update_tables
+    if len(customized_time) > 0:
+        DATA_UPDATED_STATE = DATA_UPDATED_STATE.set_index('update_date')
+        for one_date in customized_time:
+            DATA_UPDATED_STATE.loc[one_date, to_update_tables] = 0
+        DATA_UPDATED_STATE = DATA_UPDATED_STATE.loc[customized_time, to_update_tables]
+        DATA_UPDATED_STATE = DATA_UPDATED_STATE.reset_index()
+    return to_update_tables
 
 
 class BaseSource(ABC):
