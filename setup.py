@@ -5,7 +5,7 @@ with open("README.md", "r",encoding='utf8') as fh:
 
 setuptools.setup(
   name="ts-soup",
-  version="0.1.7",
+  version="0.1.8",
   author="feihan ye",
   author_email="445280206@qq.com",
   description="date series data synchronization",

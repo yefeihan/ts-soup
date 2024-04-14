@@ -83,7 +83,8 @@ class TargetTable(BaseTarget):
             new_rows = new_df.shape[0]
             if rows == new_rows:
                 updated_date.append(index)
-
+            else:
+                print(f'{self.tb} {index}因数据不全(dropna)导致update_state当天日期未更新')
         return updated_date
 
 
