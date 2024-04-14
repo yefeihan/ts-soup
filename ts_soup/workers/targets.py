@@ -12,6 +12,7 @@ class TargetTable(BaseTarget):
                  drop_na_subset=None,
                  drop_na_thresh=None,
                  has_unique_idx=False,
+                 is_empty_effect=True
                  ):
         """
         目标表信息，如果该表需要分表，则tb传入没有分表年份的表名，年份在写入时会自动加入，同时is_seperated设置为True
@@ -20,8 +21,11 @@ class TargetTable(BaseTarget):
         :param index_field:作为索引的字段，一般为日期
         :param drop_axis:如果存在空数据，drop_na的轴
         :param drop_na_subset:需要考虑删除na的列（或行）
+        :param drop_na_thresh:如果该轴不为nan的值的个数少于 drop_na_thresh设置的值，进行dropna操作
         :param has_unique_idx:是否存在唯一索引或主键，以使用replace_into语句，默认关闭，需要表添加唯一索引或主键后才能开启
                 否则会出现数据重复
+        :param is_empty_effect:表示该target  数据为空 是否影响update_state设置为 1 ,True表示数据为空，不能设置为 1
+        否则会出现数据重复
         """
         super().__init__(
                          db,
@@ -32,14 +36,19 @@ class TargetTable(BaseTarget):
         self.drop_na_subset = drop_na_subset
         self.drop_na_thresh = drop_na_thresh
         self.has_unique_idx = has_unique_idx
-
+        self.is_empty_effect = is_empty_effect
 
     def build_output(self, cur_result):
         # 写库
 
-        # 处理经过dropna以后如果全为空的情况，视为全为空，原理同上
+        # is_empty_effect 为True，表示如果该target数据为空，需要在以后再同步，因此当天update_state 不能设置为1
+        # 返回none则不会进行交集，因此不影响其他target update_state设置完成情况
         if cur_result.empty:
-            print(f'{self.tb} 无数据同步,返回结果为empty')
+
+            if self.is_empty_effect:
+                print(f'{self.tb} 无数据同步,影响最终update_state状态日期设置')
+                return []
+            print(f'{self.tb} 无数据同步,不影响最终update_state状态日期设置')
             return
 
         # 统一把index_field字段转为str类型，防止后面在insert_update_state 和各表插入数据时 使用datetime64 或 int等类型
