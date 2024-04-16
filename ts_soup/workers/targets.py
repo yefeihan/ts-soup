@@ -110,7 +110,7 @@ class TargetTable(BaseTarget):
         else:
             with self.db.begin() as conn:
                 conn.execute(
-                    f'delete from {self.tb} where {self.index_field} in ({query_in_sql(cur_result[self.index_field].values.tolist())})')
+                    f'delete from {self.tb} where {self.index_field} in ({query_in_sql(cur_result[self.index_field].drop_duplicates().values.tolist())})')
                 cur_result.to_sql(self.tb, con=conn, if_exists='append', index=False)
         print(
             f'{self.tb} 更新成功，更新日期为：\n{",".join(cur_result[self.index_field].drop_duplicates().sort_values(ascending=False).values.tolist())}')
