@@ -1,4 +1,4 @@
-from ts_soup.common import BaseTarget,query_in_sql
+from ts_soup.common import BaseTarget, query_in_sql
 import pandas as pd
 from dateutil.relativedelta import relativedelta
 import datetime
@@ -28,8 +28,8 @@ class TargetTable(BaseTarget):
         否则会出现数据重复
         """
         super().__init__(
-                         db,
-                         )
+            db,
+        )
         self.tb = tb
         self.index_field = index_field
         self.drop_axis = drop_axis
@@ -44,12 +44,8 @@ class TargetTable(BaseTarget):
         # is_empty_effect 为True，表示如果该target数据为空，需要在以后再同步，因此当天update_state 不能设置为1
         # 返回none则不会进行交集，因此不影响其他target update_state设置完成情况
         if cur_result.empty:
-
-            if self.is_empty_effect:
-                print(f'{self.tb} 无数据同步,影响最终update_state状态日期设置')
-                return []
-            print(f'{self.tb} 无数据同步,不影响最终update_state状态日期设置')
-            return
+            print(f'{self.tb} 无数据同步')
+            return [] if self.is_empty_effect else None
 
         # 统一把index_field字段转为str类型，防止后面在insert_update_state 和各表插入数据时 使用datetime64 或 int等类型
         # datetime.date 在dataframe中有可能是Object类型
@@ -76,6 +72,7 @@ class TargetTable(BaseTarget):
             params['thresh'] = self.drop_na_thresh
 
         updated_date = []
+        not_updated_date = []
         groups = cur_result.groupby(by=self.index_field, dropna=False)
         for index, group in groups:
             rows = group.shape[0]
@@ -84,11 +81,12 @@ class TargetTable(BaseTarget):
             if rows == new_rows:
                 updated_date.append(index)
             else:
-                print(f'{self.tb} {index}因数据不全(dropna)导致update_state当天日期未更新')
+                not_updated_date.append(index)
+        if len(not_updated_date) != 0:
+            print(f'{self.tb} 因数据不全(多个字段有至少一个字段为Null)导致update_state当天日期未更新：\n{",".join(sorted(not_updated_date, reverse=True))}')
         return updated_date
 
-
-    def __execute_sql(self,cur_result):
+    def __execute_sql(self, cur_result):
         """
         需要写库的操作
         :param cur_result:
@@ -100,7 +98,9 @@ class TargetTable(BaseTarget):
             insert_field = cur_result.columns.values.tolist()
             cursor = self.db_pym.cursor()
             try:
-                cursor.executemany(f'replace into {self.tb} ({",".join(insert_field)}) values ({",".join(["%s" for _ in range(len(insert_field))])})',cur_result.values.tolist())
+                cursor.executemany(
+                    f'replace into {self.tb} ({",".join(insert_field)}) values ({",".join(["%s" for _ in range(len(insert_field))])})',
+                    cur_result.values.tolist())
                 self.db_pym.commit()
             except Exception:
                 import traceback
@@ -109,15 +109,8 @@ class TargetTable(BaseTarget):
                 raise Exception('数据库操作错误!')
         else:
             with self.db.begin() as conn:
-                conn.execute(f'delete from {self.tb} where {self.index_field} in ({query_in_sql(cur_result[self.index_field].values.tolist())})')
+                conn.execute(
+                    f'delete from {self.tb} where {self.index_field} in ({query_in_sql(cur_result[self.index_field].values.tolist())})')
                 cur_result.to_sql(self.tb, con=conn, if_exists='append', index=False)
-        print(f'{self.db_str}：{self.tb} 更新成功，更新日期为：\n{",".join(cur_result[self.index_field].drop_duplicates().values.tolist())}')
-
-
-
-
-
-
-
-
-
+        print(
+            f'{self.tb} 更新成功，更新日期为：\n{",".join(cur_result[self.index_field].drop_duplicates().sort_values(ascending=False).values.tolist())}')

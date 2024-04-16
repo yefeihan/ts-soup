@@ -9,7 +9,6 @@ import traceback
 import pymysql
 from sqlalchemy import create_engine
 
-
 warnings.filterwarnings('ignore')
 
 # 注册形成的数据库连接
@@ -91,7 +90,6 @@ def __init(customized_table, customized_time, sync_start, sync_end, db_infos):
             else:
                 raise ValueError('未配置engine类型')
 
-
     SYNC_FROM_DATE = sync_start
     CURRENT_DATE = sync_end
     to_update_tables = pd.read_sql('select * from to_update_tables', con=USABLE_DBS['targets_default'])['table_name']
@@ -123,7 +121,7 @@ def __init(customized_table, customized_time, sync_start, sync_end, db_infos):
     DATA_UPDATED_STATE[non_columns] = 0
     DATA_UPDATED_STATE = DATA_UPDATED_STATE.reset_index()
     DATA_UPDATED_STATE['update_date'] = DATA_UPDATED_STATE['update_date'].apply(lambda x: x.strftime('%Y-%m-%d'))
-    to_update_tables = customized_table if len(customized_table)>0 else to_update_tables
+    to_update_tables = customized_table if len(customized_table) > 0 else to_update_tables
     if len(customized_time) > 0:
         DATA_UPDATED_STATE = DATA_UPDATED_STATE.set_index('update_date')
         for one_date in customized_time:
@@ -137,8 +135,9 @@ class BaseSource(ABC):
     """
     定义需要使用在入口函数中注册的数据库连接的source的基类，即 如果需要使用数据库连接，则需要继承BaseSource
     """
+
     def __init__(self,
-                 db:str=None,
+                 db: str = None,
                  index_field: str = 'date',
                  empty_check: bool = True):
         """
@@ -166,7 +165,8 @@ class BaseTarget(ABC):
     """
     定义需要使用在入口函数中注册的数据库连接的target的基类，即 如果需要使用数据库连接，则需要继承BaseTarget
     """
-    def __init__(self,db: str = None):
+
+    def __init__(self, db: str = None):
         if db:
             self.db = USABLE_DBS.get(db)
             self.db_pym = USABLE_DBS.get(f'{db}_pym')
@@ -185,8 +185,6 @@ class BaseTarget(ABC):
         pass
 
 
-
-
 class Executor:
     """
     数据处理原则：
@@ -196,7 +194,7 @@ class Executor:
                如果数据结果全都有值，但是存在个别天数的行中存在空数据，则会删除空数据对应的行，updated_state更新取每个数据结果的交集作为日期
     """
 
-    def __init__(self, sources, targets, executed_table,customized_updated_state=None):
+    def __init__(self, sources, targets, executed_table, customized_updated_state=None):
         """
         数据库的操作器，负责从源表读取数据 _make_source_data，以及写入目标表 _handle_result
         """
@@ -207,7 +205,6 @@ class Executor:
         self.source_data = []
         self.executed_table = executed_table
         self.to_update_date = self.__get_update_date()
-
 
     def __get_update_date(self):
         return DATA_UPDATED_STATE.loc[~(DATA_UPDATED_STATE[self.executed_table] == 1), 'update_date']
@@ -226,7 +223,7 @@ class Executor:
             empty_check设置为False，需要在数据处理逻辑中对data_source是否为空进行判断，不然当下文在进行数据处理时
             使用行列索引，如果df是空容易导致keyError错误。
             """
-            if hasattr(source,'empty_check'):
+            if hasattr(source, 'empty_check'):
                 if source.empty_check and data.empty:
                     self.any_source_empty = True
                     for _ in self.targets:
@@ -265,17 +262,18 @@ class Executor:
             if updated_date is None:
                 continue
             date_df = pd.to_datetime(updated_date)
-            updated_date = pd.DataFrame(date_df, columns=['update_date']).drop_duplicates().applymap(lambda x:x.strftime('%Y-%m-%d'))
+            updated_date = pd.DataFrame(date_df, columns=['update_date']).drop_duplicates().applymap(
+                lambda x: x.strftime('%Y-%m-%d'))
 
             # 如果未传入自定义更新日期，则取数据日期作为 处理操作表的更新日期，取各数据结果交集
             if update_state_date is not None:
                 update_state_date = update_state_date.merge(
-                    pd.DataFrame(updated_date,columns=['update_date']).drop_duplicates(),
+                    pd.DataFrame(updated_date, columns=['update_date']).drop_duplicates(),
                     on='update_date',
                     how='inner'
                 )[['update_date']]
             else:
-                update_state_date = pd.DataFrame(updated_date,columns=['update_date']).drop_duplicates()
+                update_state_date = pd.DataFrame(updated_date, columns=['update_date']).drop_duplicates()
 
         # 将方法的操作记录写入数据库
         if func_update_flag:
@@ -320,9 +318,14 @@ def db_operator(sources: list, targets: list):
 
                 # 表示该方法已同步完所有数据，则不再执行后续操作
                 if len(executor.to_update_date) == 0:
-                    print(f'{func.__name__} 方法已同步至最新')
+                    print(f'{func.__name__} 方法已同步至最新\n\n')
                     return
 
+                msg_len = len(f' {func.__name__} 开始')
+                before_white_len = int((110-msg_len)/2)
+                after_white_len = 110-msg_len-before_white_len
+
+                print('>'*before_white_len + f' {func.__name__} 开始' +'>'*after_white_len)
                 if len(sources) != 0:
                     executor.make_source_data()
 
@@ -331,6 +334,7 @@ def db_operator(sources: list, targets: list):
                     func(executor)
 
                 executor.handle_result()
+                print('<'*before_white_len+ f' {func.__name__} 结束'+'<'*after_white_len+'\n'*2)
             except Exception:
                 global EXECUTE_STATE
                 EXECUTE_STATE = False
