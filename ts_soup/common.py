@@ -321,11 +321,11 @@ def db_operator(sources: list, targets: list):
                     print(f'{func.__name__} 方法已同步至最新\n\n')
                     return
 
-                msg_len = len(f' {func.__name__} 开始')
+                msg_len = len(f' {func.__name__} 开始 ')
                 before_white_len = int((110-msg_len)/2)
                 after_white_len = 110-msg_len-before_white_len
 
-                print('>'*before_white_len + f' {func.__name__} 开始' +'>'*after_white_len)
+                print('>'*before_white_len + f' {func.__name__} 开始 ' +'>'*after_white_len)
                 if len(sources) != 0:
                     executor.make_source_data()
 
@@ -334,7 +334,7 @@ def db_operator(sources: list, targets: list):
                     func(executor)
 
                 executor.handle_result()
-                print('<'*before_white_len+ f' {func.__name__} 结束'+'<'*after_white_len+'\n'*2)
+                print('<'*before_white_len+ f' {func.__name__} 结束 '+'<'*after_white_len+'\n'*2)
             except Exception:
                 global EXECUTE_STATE
                 EXECUTE_STATE = False
