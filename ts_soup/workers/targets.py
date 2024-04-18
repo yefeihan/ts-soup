@@ -56,13 +56,15 @@ class TargetTable(BaseTarget):
 
         self.__execute_sql(cur_result)
 
-        """如果是多个数据源合并到一个表，多个字段有若干个为空，或者一个日期内多行为空，
+        """如果是多个数据源合并到一个表，多个字段有若干个为空，或者一个日期内多行内有字段为空，
         则需要在插入前删除为空的字段的日期，保证下次执行还能同步该日期
+        可以通过 drop_na_subset,drop_na_thresh 参数控制是否执行该步骤，若是因此而被删除的日期，
+        在同步日志中会有 "因数据不全(多个字段有至少一个字段为Null)导致update_state当天日期未更新" 提示
         # e.g  
-        index       b   c   d
-        2023-01     na  2   3
-        2023-01     1   2   3
-        2023-02     1   3   4
+        pdate       period  value1  value2   
+        2023-01     1       2       na
+        2023-01     1       na      3
+        2023-02     1       3       4
         2023-01日期有Na，则不作为更新完成的日期
         """
         params = {'axis': self.drop_axis}

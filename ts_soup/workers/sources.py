@@ -1,5 +1,5 @@
 import pandas as pd
-from ts_soup.common import query_in_sql,BaseSource
+from ts_soup.common import query_in_sql, BaseSource
 
 
 class Source(BaseSource):
@@ -9,7 +9,10 @@ class Source(BaseSource):
                  empty_check=True,
                  query_field: str = '*',
                  index_field='date',
-                 other_condition: str = None):
+                 other_condition: str = None,
+                 order_index: list = None,
+                 order_desc: bool = False
+                 ):
         """
         单表查询数据源信息
         :param tb: 数据表名
@@ -23,14 +26,26 @@ class Source(BaseSource):
         self.tb = tb
         self.query_field = query_field
         self.other_condition = other_condition
-
+        self.order_index = order_index
+        self.order_desc = order_desc
 
     def build_source(self, to_update_date):
         base_sql = f'select {self.query_field} from {self.tb} where 1=1 '
         if self.other_condition:
             base_sql += f' and {self.other_condition} '
         if self.index_field:
-            base_sql += f' and {self.index_field} in ({query_in_sql(to_update_date.values.tolist())}) order by {self.index_field}'
+            base_sql += f' and {self.index_field} in ({query_in_sql(to_update_date.values.tolist())})'
+
+        # 处理排序
+        if self.order_index is not None:
+            base_sql += f' order by {",".join(self.order_index)}'
+            if self.order_desc:
+                base_sql += ' desc'
+        elif self.index_field:
+            base_sql += f' order by {self.index_field}'
+            if self.order_desc:
+                base_sql += ' desc'
+
         return pd.read_sql(base_sql, con=self.db)
 
 
@@ -38,9 +53,10 @@ class MultiSource(BaseSource):
     """
     多数据源联合查询时使用
     """
+
     def __init__(self,
                  relations: list,
-                 db: str=None ,
+                 db: str = None,
                  empty_check=True,
                  index_field='date'):
         """
@@ -57,18 +73,20 @@ class MultiSource(BaseSource):
         query_params = []
         join_stm = ''
         where_clause = ''
-        for index,rel in enumerate(self.relations):
-            query_params.append(','.join([f'{rel["left"]}.'+i if i!='' else '' for i in rel['lquery_field'].split(',')])\
-                            +(',' if rel['lquery_field']!='' else '')+\
-                            ','.join([f'{rel["right"]}.'+i if i!='' else '' for i in rel['rquery_field'].split(',')]))
-            join_stm+=f"{rel['how']} join {rel['right']} on {rel['left']}.{rel['l_on']}={rel['right']}.{rel['r_on']} "
-            where_clause += (f" and {rel['left']+'.'+rel['l_cons']}" if rel['l_cons']!='' else '')+(f"and {rel['right']+'.'+rel['r_cons']}" if rel['r_cons']!='' else '')
+        for index, rel in enumerate(self.relations):
+            query_params.append(
+                ','.join([f'{rel["left"]}.' + i if i != '' else '' for i in rel['lquery_field'].split(',')]) \
+                + (',' if rel['lquery_field'] != '' else '') + \
+                ','.join([f'{rel["right"]}.' + i if i != '' else '' for i in rel['rquery_field'].split(',')]))
+            join_stm += f"{rel['how']} join {rel['right']} on {rel['left']}.{rel['l_on']}={rel['right']}.{rel['r_on']} "
+            where_clause += (f" and {rel['left'] + '.' + rel['l_cons']}" if rel['l_cons'] != '' else '') + (
+                f"and {rel['right'] + '.' + rel['r_cons']}" if rel['r_cons'] != '' else '')
         base_sql = f'select {",".join(query_params)} from {self.relations[0]["left"]} {join_stm} where 1=1 {where_clause} and {self.index_field} in ({query_in_sql(to_update_date)})'
-        return pd.read_sql(base_sql,con=self.db)
+        return pd.read_sql(base_sql, con=self.db)
 
 
 class RawSqlSource(BaseSource):
-    def __init__(self,  index_field,sql,db:str=None, empty_check=True):
+    def __init__(self, index_field, sql, db: str = None, empty_check=True):
         """
         直接使用sql的源
         :param db:
@@ -78,5 +96,6 @@ class RawSqlSource(BaseSource):
         """
         super().__init__(db, index_field, empty_check)
         self.sql = sql
+
     def build_source(self, to_update_date):
-        return pd.read_sql(self.sql.format(query_in_sql(to_update_date)),con=self.db)
+        return pd.read_sql(self.sql.format(query_in_sql(to_update_date)), con=self.db)
