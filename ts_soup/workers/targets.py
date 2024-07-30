@@ -86,7 +86,7 @@ class TargetTable(BaseTarget):
                 not_updated_date.append(index)
         if len(not_updated_date) != 0:
             print(f'{self.tb} 因数据不全(多个字段有至少一个字段为Null)导致update_state当天日期未更新：\n{",".join(sorted(not_updated_date, reverse=True))}')
-        return updated_date
+        return updated_date if self.is_empty_effect else None
 
     def __execute_sql(self, cur_result):
         """

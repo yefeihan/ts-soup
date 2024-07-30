@@ -28,24 +28,17 @@ def query_in_sql(list_):
     return ','.join(list(map(lambda x: '"' + x + '"', list_)))
 
 
-def get_sqlalchemy_engine(db_info, db_type):
+def get_sqlalchemy_engine(db_info, db_type,engine_index):
     global USABLE_DBS
-    engine = create_engine(
-        f'mysql+pymysql://{db_info["user"]}:{parse.quote_plus(db_info["pwd"])}@{db_info["ip"]}:3306/{db_info["db"]}')
+    engine = db_info['engine'][engine_index]
     USABLE_DBS[db_info['alias']] = engine
     if db_info['default']:
         USABLE_DBS[f'{db_type}_default'] = engine
 
 
-def get_pymsql_engine(db_info, db_type):
+def get_pymsql_engine(db_info, db_type,engine_index):
     global USABLE_DBS
-    engine = pymysql.connect(
-        host=db_info['ip'],
-        user=db_info['user'],
-        password=db_info['pwd'],
-        port=int(db_info['port']),
-        database=db_info['db']
-    )
+    engine = db_info['engine'][engine_index]
     USABLE_DBS[db_info['alias'] + '_pym'] = engine
     if db_info['default']:
         USABLE_DBS[f'{db_type}_default_pym'] = engine
@@ -81,11 +74,11 @@ def __init(customized_table, customized_time, sync_start, sync_end, db_infos):
             engine_types = db_info.get('engine_type')
 
             if engine_types:
-                for engine_type in engine_types:
+                for engine_index,engine_type in enumerate(engine_types):
                     if engine_type == 'sqlalchemy':
-                        get_sqlalchemy_engine(db_info, db_type)
+                        get_sqlalchemy_engine(db_info, db_type,engine_index)
                     else:
-                        get_pymsql_engine(db_info, db_type)
+                        get_pymsql_engine(db_info, db_type,engine_index)
 
             else:
                 raise ValueError('未配置engine类型')
