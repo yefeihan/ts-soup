@@ -5,7 +5,7 @@ from urllib import parse
 import pandas as pd
 from functools import wraps
 import traceback
-
+from sqlalchemy import text
 import pymysql
 from sqlalchemy import create_engine
 
@@ -87,13 +87,13 @@ def __init(customized_table, customized_time, sync_start, sync_end, db_infos):
     CURRENT_DATE = sync_end
     to_update_tables = pd.read_sql('select * from to_update_tables', con=USABLE_DBS['targets_default'])['table_name']
     with USABLE_DBS['targets_default'].begin() as conn:
-        conn.execute("""
+        conn.execute(text("""
         CREATE TABLE if not exists `updated_state`  (
                       `update_date` date DEFAULT NULL,
                       `table_name` varchar(50) COLLATE utf8mb4_general_ci NOT NULL,
                       UNIQUE KEY `index` (`update_date`,`table_name`) USING BTREE COMMENT '唯一索引'
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
-        """)
+        """))
 
     data_updated_state = pd.read_sql('select * from updated_state where update_date >= "{}"'.format(SYNC_FROM_DATE),
                                      con=USABLE_DBS['targets_default'])
