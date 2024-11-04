@@ -1,21 +1,14 @@
 import warnings
 from abc import abstractmethod, ABC
-from urllib import parse
-
 import pandas as pd
 from functools import wraps
 import traceback
 from sqlalchemy import text
-import pymysql
-from sqlalchemy import create_engine
 
 warnings.filterwarnings('ignore')
 
 # 注册形成的数据库连接
 USABLE_DBS = {}
-
-CURRENT_DATE = None
-SYNC_FROM_DATE = None
 
 # 同步程序执行情况
 EXECUTE_STATE = True
@@ -47,29 +40,25 @@ def get_pymsql_engine(db_info, db_type,engine_index):
 def __init(customized_table, customized_time, sync_start, sync_end, db_infos):
     """
     整个同步程序的初始化程序，并处理命令行参数 1、读取之前更新状态，形成updated_state矩阵。
-                                        2、确定需要更新的table
-    形成策略：
+                                        2、确定需要更新的table，并返回
+    更新策略：
      1、指定时间，未指定表格:
-        data_updated_state: 第四类转换完成的data_updated_state,对应时间的行 state列全部赋值为 0
-        to_update_tables: 返回查询结果
+        {指定时间内} {所有表}的内容全部从源重新读取并覆盖
      2、指定表格，未指定时间：
-        data_updated_state: 第四类转换完成的data_updated_state
-        to_update_tables: 返回指定表格
+        {指定表}根据之前同步的记录，{未同步}的日期从源读取并写入目标
      3、指定时间，指定表格:
-        data_updated_state: 第四类转换完成的data_updated_state，对应时间的行 state列全部赋值为 0
-        to_update_tables: 返回指定表格
+        {指定时间内} {指定表}的内容全部从源重新读取并覆盖
      4、未指定时间，未指定表格:
-        data_updated_state: 转换成一个大的矩阵，列为日期，行为待同步表格，值为0和1，0表示未同步
-        to_update_tables: 返回查询结果
+        {所有表} 根据 {未同步}的日期从源读取并写入
     :param sync_end: 同步结束日期
     :param sync_start: 同步开始日期
     :param customized_table: 手动指定的表
     :param customized_time: 手动指定的时间
     :return:
     """
-    global DATA_UPDATED_STATE, SYNC_FROM_DATE, CURRENT_DATE, USABLE_DBS
-
-    for db_type in ['sources', 'targets']:  # 加载数据源配置 设置数据库连接
+    global DATA_UPDATED_STATE, USABLE_DBS
+    # 加载数据源配置 设置数据库连接
+    for db_type in ['sources', 'targets']:
         for db_info in db_infos[db_type]:
             engine_types = db_info.get('engine_type')
 
@@ -83,9 +72,7 @@ def __init(customized_table, customized_time, sync_start, sync_end, db_infos):
             else:
                 raise ValueError('未配置engine类型')
 
-    SYNC_FROM_DATE = sync_start
-    CURRENT_DATE = sync_end
-    to_update_tables = pd.read_sql('select * from to_update_tables', con=USABLE_DBS['targets_default'])['table_name']
+    # 创建数据表 updated_state
     with USABLE_DBS['targets_default'].begin() as conn:
         conn.execute(text("""
         CREATE TABLE if not exists `updated_state`  (
@@ -95,32 +82,41 @@ def __init(customized_table, customized_time, sync_start, sync_end, db_infos):
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
         """))
 
-    data_updated_state = pd.read_sql('select * from updated_state where update_date >= "{}"'.format(SYNC_FROM_DATE),
-                                     con=USABLE_DBS['targets_default'])
+    # 需要同步的表，根据数据库中to_update_tables确定，如果传入--table，则为传入的表
+    to_update_tables = customized_table if len(customized_table) > 0 else pd.read_sql('select * from to_update_tables', con=USABLE_DBS['targets_default'])['table_name']
+    # 如果传入--time，则将传入日期的，需要更新的表的状态全部设置为0，全部进行同步
+    if len(customized_time) > 0:
+        DATA_UPDATED_STATE = pd.DataFrame(index=customized_time,columns=to_update_tables)
+        DATA_UPDATED_STATE = DATA_UPDATED_STATE.reset_index().rename({'index':'update_date'},axis=1).fillna(0)
+        return to_update_tables
 
-    data_updated_state['update_date'] = pd.to_datetime(data_updated_state['update_date'])  # 统一时间类型
-    sync_date_range = pd.date_range(SYNC_FROM_DATE, CURRENT_DATE)
+    # 以下按照updated_state记录情况进行同步
+    data_updated_state = pd.read_sql('select * from updated_state where update_date >= "{}" and update_date <= "{}"'.format(sync_start,sync_end),
+                                     con=USABLE_DBS['targets_default'])
+    # 统一时间类型
+    data_updated_state['update_date'] = pd.to_datetime(data_updated_state['update_date'])
+    sync_date_range = pd.date_range(sync_start, sync_end)
     fill_date_range = pd.DataFrame(sync_date_range, columns=['update_date'])
     fill_date_range['table_name'] = 'fill_date_range'
-    # 利用fill_date_range把后面的Pivot table时间索引补全到 sync_from_date 开始到明天的日期
+    # 利用fill_date_range把data_updated_state的日期补全为整个需要同步的期间的所有日期
+    # 透视的时候如果某table_name没有对应同步日期记录，则该日期table_name的值为NA
     data_updated_state = pd.concat([data_updated_state, fill_date_range])
     data_updated_state['state'] = 1
     pivot_table = data_updated_state.pivot_table(index='update_date', columns='table_name', values='state')
+    # 原来记录里有且现在仍需要的表
+    both_columns = [i for i in to_update_tables if i in pivot_table.columns.values.tolist()]
+    # 原来记录没有现在新增的表，新增的表需要扩展data_updated_state
+    non_columns = [i for i in to_update_tables if i not in pivot_table.columns.values.tolist()]
 
-    both_columns = [i for i in to_update_tables if i in pivot_table.columns.values.tolist()]  # 原来记录里有且现在仍需要的表
+    # DATA_UPDATED_STATE是data_updated_state的二维表形式，以日期为行索引，表名为列索引，
+    # 且经过non_columns的扩展，是最终同步时判断状态所依赖的表
 
-    non_columns = [i for i in to_update_tables if i not in pivot_table.columns.values.tolist()]  # 原来记录没有现在新增的表
+    # 把原来有的表data_updated_state的记录，未同步的日期置为0
     DATA_UPDATED_STATE = pivot_table[both_columns].fillna(0)
+    # 扩展新增表，扩展DATA_UPDATED_STATE
     DATA_UPDATED_STATE[non_columns] = 0
     DATA_UPDATED_STATE = DATA_UPDATED_STATE.reset_index()
     DATA_UPDATED_STATE['update_date'] = DATA_UPDATED_STATE['update_date'].apply(lambda x: x.strftime('%Y-%m-%d'))
-    to_update_tables = customized_table if len(customized_table) > 0 else to_update_tables
-    if len(customized_time) > 0:
-        DATA_UPDATED_STATE = DATA_UPDATED_STATE.set_index('update_date')
-        for one_date in customized_time:
-            DATA_UPDATED_STATE.loc[one_date, to_update_tables] = 0
-        DATA_UPDATED_STATE = DATA_UPDATED_STATE.loc[customized_time, to_update_tables]
-        DATA_UPDATED_STATE = DATA_UPDATED_STATE.reset_index()
     return to_update_tables
 
 
